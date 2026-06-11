@@ -121,6 +121,13 @@ window.__SLDASH = {
   // fill the answer key into a gate and run it, exactly as a player would
   solveAndRun(gateId) {
     const g = Level.gates.find((x) => x.id === gateId) || Level.gates[0];
+    if (g.kind === 'troll') {
+      const r = g.riddles[g.riddleIdx];
+      g.runs++;
+      Gates.close();
+      Gates.trollPass(g, r);
+      return g.id;
+    }
     g.params = { ...g.answerKey };
     g.state = 'armed';
     g.runs++;

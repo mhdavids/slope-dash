@@ -33,6 +33,28 @@ for (const w of WORLDS) {
     for (const g of l.gates || []) {
       nGates++;
       const gtag = `${tag} gate '${g.id}'`;
+
+      if (g.kind === 'troll') {
+        if (!g.name || !g.greeting) warn(`${gtag} troll missing name/greeting`);
+        if (!Array.isArray(g.riddles) || g.riddles.length < 2) warn(`${gtag} troll needs >= 2 riddles`);
+        for (const [ri, r] of (g.riddles || []).entries()) {
+          if (!r.q || !r.explain) warn(`${gtag} riddle ${ri} missing q/explain`);
+          if (r.type === 'numeric') {
+            if (typeof r.answer !== 'number' || !Number.isFinite(r.answer)) warn(`${gtag} riddle ${ri} numeric answer invalid`);
+          } else if (r.type === 'mc') {
+            const correct = (r.options || []).filter((o) => o.correct).length;
+            if (!r.options || r.options.length < 2 || r.options.length > 4) warn(`${gtag} riddle ${ri} needs 2-4 options`);
+            if (correct !== 1) warn(`${gtag} riddle ${ri} has ${correct} correct options (needs exactly 1)`);
+          } else warn(`${gtag} riddle ${ri} unknown type '${r.type}'`);
+        }
+        const lock = l.platforms.find((p) => p.gateLock === g.id);
+        if (!lock) warn(`${gtag} no gateLock platform (the troll isn't physically blocking)`);
+        if (g.standX == null || g.standY == null) warn(`${gtag} missing standX/standY`);
+        const z = { ...g.zone };
+        if (!l.platforms.some((p) => overlap({ ...z, h: z.h + 8 }, p))) warn(`${gtag} zone not near a platform`);
+        continue;   // trolls need no answerKey/predict/ride sim
+      }
+
       if (!g.answerKey) { warn(`${gtag} missing answerKey`); continue; }
       if (!g.title || !g.prompt || !g.controls?.length) warn(`${gtag} missing title/prompt/controls`);
       // zone should sit on / near a platform so the player can reach it

@@ -237,8 +237,9 @@ export const Level = {
     // gates render their world-pieces (tracks, circles, doors, axes) under the player
     for (const g of this.gates) Gates.drawWorld(g, ctx, t);
 
-    // platforms
+    // platforms (gateLock walls are physics-only — their gate draws the visual)
     for (const r of this.platforms) {
+      if (r.gateLock) continue;
       ctx.fillStyle = pal.plat;
       ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 6); ctx.fill();
       ctx.fillStyle = pal.platTop;

@@ -29,6 +29,7 @@ export const Gates = {
       params: { ...(def.start || {}) },
       shown: { ...(def.start || {}) },   // what the WORLD renders — only updates on Run (anti-guess)
       runs: 0, medal: null, lastLandX: null,
+      riddleIdx: def.kind === 'troll' ? Math.floor(Math.random() * def.riddles.length) : 0,
       anim: { podAngle: def.podAngle ?? Math.PI / 2, clock: -1, trace: [] },
     };
   },
@@ -42,6 +43,9 @@ export const Gates = {
   },
 
   promptFor(g) {
+    if (g.kind === 'troll') {
+      return g.cleared ? `E: another riddle from ${g.name}?` : `E: face ${g.name}'s riddle`;
+    }
     if (g.cleared) return `E: re-run ${g.title}`;
     return `E: ${g.state === 'armed' ? 're-tune' : 'open'} ${g.title}`;
   },
@@ -77,7 +81,13 @@ export const Gates = {
   },
 
   key(e) {
-    if (e.key === 'Escape') { e.preventDefault(); this.close(); }
+    if (e.key === 'Escape') { e.preventDefault(); this.close(); return; }
+    // troll multiple-choice: number keys pick an option
+    if (this.open?.kind === 'troll') {
+      const n = parseInt(e.key, 10);
+      const opts = this.panel.querySelectorAll('.troll-opt');
+      if (n >= 1 && n <= opts.length) { opts[n - 1].click(); return; }
+    }
     // Enter inside a number input shouldn't trigger global handlers
     if (e.key === 'Enter' && e.target?.tagName !== 'INPUT') {
       qs('#gate-run')?.click();
@@ -85,6 +95,7 @@ export const Gates = {
   },
 
   render(g) {
+    if (g.kind === 'troll') return this.renderTroll(g);
     const c = this.controlsHTML(g);
     this.panel.innerHTML = `
       <div class="gate-card" style="--w:${G.world.pal.accent}">
@@ -126,6 +137,80 @@ export const Gates = {
       this.startRide(g);
     });
     this.panel.querySelector('input')?.focus();
+  },
+
+  // ======================= troll riddles =======================
+  renderTroll(g) {
+    const r = g.riddles[g.riddleIdx];
+    let body;
+    if (r.type === 'mc') {
+      // shuffle options, remember the mapping for keyboard + submit
+      const order = r.options.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      g._mcOrder = order;
+      body = `<div class="troll-opts">${order.map((orig, i) =>
+        `<button class="troll-opt" data-orig="${orig}"><span class="key">${i + 1}</span> ${rich(r.options[orig].label)}</button>`).join('')}</div>`;
+    } else {
+      body = `<label class="gc-row"><span class="gc-name">your answer</span>
+        <input type="number" step="any" data-key="ans" class="gc-num" placeholder="?" autocomplete="off"></label>
+        <div class="gate-buttons"><button id="troll-answer" class="btn-go">Answer ▸</button>
+        <button id="gate-cancel" class="btn-quiet">Retreat (Esc)</button></div>`;
+    }
+    this.panel.innerHTML = `
+      <div class="gate-card troll-card" style="--w:${G.world.pal.accent}">
+        <div class="gate-kicker">A VOICE FROM UNDER THE BRIDGE</div>
+        <h2>${g.name} ${g.cleared ? 'wants a rematch' : 'blocks the way'}</h2>
+        <div class="troll-says">“${g.cleared ? 'Back again? Then answer me THIS.' : g.greeting}”</div>
+        <div class="gate-prompt troll-riddle">${rich(r.q)}</div>
+        ${body}
+        ${r.type === 'mc' ? '<div class="gate-buttons"><button id="gate-cancel" class="btn-quiet">Retreat (Esc)</button></div>' : ''}
+        <div class="gate-foot">Attempt ${g.runs + 1}${g.cleared ? ' · already answered — bragging rights only' : ' · first answer = gold · wrong = a short flight off the bridge'}</div>
+      </div>`;
+    this.panel.querySelectorAll('.troll-opt').forEach((b) =>
+      b.addEventListener('click', () => this.trollSubmit(g, { opt: parseInt(b.dataset.orig, 10) })));
+    qs('#troll-answer')?.addEventListener('click', () => {
+      const v = parseFloat(this.panel.querySelector('[data-key="ans"]')?.value);
+      if (Number.isNaN(v)) { G.hud.toast('The troll taps its foot. Enter a number.', 'poor'); return; }
+      this.trollSubmit(g, { num: v });
+    });
+    this.panel.querySelector('[data-key="ans"]')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') qs('#troll-answer')?.click();
+    });
+    qs('#gate-cancel')?.addEventListener('click', () => this.close());
+    (this.panel.querySelector('[data-key="ans"]') || this.panel.querySelector('.troll-opt'))?.focus();
+  },
+
+  trollSubmit(g, given) {
+    const r = g.riddles[g.riddleIdx];
+    g.runs++;
+    const right = r.type === 'mc'
+      ? !!r.options[given.opt]?.correct
+      : Math.abs(given.num - r.answer) <= (r.tol ?? 0.01);
+    this.close();
+    if (right) return this.trollPass(g, r);
+    // wrong: a different riddle next time, and a short flight off the bridge
+    if (g.riddles.length > 1) {
+      let next = g.riddleIdx;
+      while (next === g.riddleIdx) next = Math.floor(Math.random() * g.riddles.length);
+      g.riddleIdx = next;
+    }
+    G.levelCtl.die(`${g.name}: “WRONG.” ${r.explain ? rich(r.explain) : ''}`);
+  },
+
+  trollPass(g, r) {
+    const p = G.levelCtl.pl;
+    if (!g.cleared) {
+      g.cleared = true;
+      g.medal = g.runs === 1 ? 'gold' : g.runs === 2 ? 'silver' : 'bronze';
+      G.hud.toast(`${g.name} grunts, almost impressed — ${g.medal} ✦ · ${r.explain || ''}`, g.medal === 'gold' ? 'gold' : 'info');
+    } else {
+      G.hud.toast(`${g.name}: “Correct. Again. Show-off.”`, 'info');
+    }
+    Sfx.good();
+    G.levelCtl.burst(p.x + 13, p.y + 10, 22, '#7dffb0');
   },
 
   controlsHTML(g) {
@@ -560,6 +645,42 @@ export const Gates = {
       const z = g.zone;
       ctx.fillStyle = pal.device;
       ctx.beginPath(); ctx.roundRect(z.x, z.y + z.h - 12, z.w, 12, 4); ctx.fill();
+    }
+
+    else if (g.kind === 'troll') {
+      const bob = Math.sin(t * 2.2) * 2;
+      const tx = g.cleared ? g.standX + 36 : g.standX;
+      const ty = g.standY + bob;
+      // body
+      ctx.fillStyle = '#5e7a52';
+      ctx.beginPath(); ctx.roundRect(tx - 18, ty - 42, 36, 42, 10); ctx.fill();
+      // belly
+      ctx.fillStyle = '#74916a';
+      ctx.beginPath(); ctx.roundRect(tx - 11, ty - 24, 22, 22, 7); ctx.fill();
+      // horns
+      ctx.fillStyle = '#e8dcb4';
+      ctx.beginPath(); ctx.moveTo(tx - 16, ty - 40); ctx.lineTo(tx - 22, ty - 52); ctx.lineTo(tx - 9, ty - 44); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(tx + 16, ty - 40); ctx.lineTo(tx + 22, ty - 52); ctx.lineTo(tx + 9, ty - 44); ctx.closePath(); ctx.fill();
+      // heavy brow + eyes
+      ctx.fillStyle = '#3c5237';
+      ctx.fillRect(tx - 13, ty - 36, 26, 5);
+      ctx.fillStyle = g.cleared ? '#7dffb0' : '#ffd76e';
+      ctx.beginPath(); ctx.arc(tx - 6, ty - 28, 3, 0, Math.PI * 2); ctx.arc(tx + 6, ty - 28, 3, 0, Math.PI * 2); ctx.fill();
+      // arm: club across the deck when blocking, raised wave when cleared
+      ctx.strokeStyle = '#5e7a52'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+      ctx.beginPath();
+      if (g.cleared) { ctx.moveTo(tx + 14, ty - 22); ctx.lineTo(tx + 26, ty - 40 + bob); }
+      else { ctx.moveTo(tx + 14, ty - 20); ctx.lineTo(tx + 30, ty - 4); }
+      ctx.stroke();
+      if (!g.cleared) {
+        ctx.fillStyle = '#6b4a2a';
+        ctx.beginPath(); ctx.roundRect(tx + 24, ty - 14, 11, 16, 4); ctx.fill();
+      }
+      // name tag
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = '12px Outfit, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(g.name, tx, ty - 58);
     }
 
     else if (g.kind === 'track') {

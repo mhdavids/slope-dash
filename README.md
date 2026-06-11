@@ -31,6 +31,10 @@ python3 -m http.server 8782
 
 Two levels per world; the second always demands **exact values**, exam-style.
 
+## The trolls
+
+Not everything on the AP exam can be a physics puzzle — theorem hypotheses, interpretation with units, table problems, L'Hôpital's fine print. That content lives with the **bridge trolls**: six riddle-keepers (Grundle, Berta, Knot, Old Manny Units, Meanie the Mean Value Troll, Sumguy the Elder), each guarding a bridge with a bank of exam riddles — numeric entry or multiple choice, KaTeX-typeset. Answer right and they step aside; answer wrong and you take a short flight off the bridge — and the next attempt draws a **different riddle**, so the only reliable strategy is knowing all of them. First answer = gold, same as everywhere.
+
 ## Controls
 
 | Key | Action |
