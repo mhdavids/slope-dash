@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Slope Dash — a calculus platformer</title>
+  <meta name="description" content="A 2D platformer where the obstacles are calculus: tune jump parabolas, weld piecewise tracks continuous, compute tangent release points, and time your runs." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div id="hud-name"></div>
+      <div id="hud-right">
+        <div id="hud-medals"></div>
+        <button id="btn-notebook" title="Notebook (N)">📓</button>
+        <button id="btn-mute" title="Sound (M)">🔊</button>
+        <button id="btn-exit" title="Level select (Esc)">🗺️</button>
+      </div>
+    </div>
+
+    <div id="prompt" class="hidden"></div>
+    <div id="toasts"></div>
+
+    <!-- scope-mode gate panel -->
+    <div id="gate" class="hidden"></div>
+
+    <!-- screens -->
+    <div id="title" class="screen hidden">
+      <div class="title-inner">
+        <div class="title-kicker">A PLATFORMER WHERE THE PHYSICS GRADES YOUR CALCULUS</div>
+        <h1 class="title-logo">SLOPE<span>DASH</span></h1>
+        <div class="title-sub">Tune the parabola. Weld the seams. Ride the tangent. Beat the clock.</div>
+        <div class="title-buttons">
+          <button id="title-start" class="btn-go">Start ▸</button>
+          <button id="title-help" class="btn-quiet">How to Play</button>
+        </div>
+        <div class="title-foot">AP® Calculus AB practice in disguise · a study companion, not a substitute for your textbook</div>
+      </div>
+    </div>
+
+    <div id="select" class="screen hidden"></div>
+    <div id="complete" class="hidden"></div>
+    <div id="notebook" class="hidden"></div>
+
+    <div id="help" class="hidden">
+      <div class="help-card">
+        <h2>How to Play</h2>
+        <table>
+          <tr><td><b>← → / A D</b></td><td>Run</td></tr>
+          <tr><td><b>↑ / W / Space</b></td><td>Jump (tap = short hop)</td></tr>
+          <tr><td><b>E / Enter</b></td><td>Open a math gate</td></tr>
+          <tr><td><b>N</b></td><td>Notebook — the math behind every gate</td></tr>
+          <tr><td><b>R</b></td><td>Restart level</td></tr>
+          <tr><td><b>Esc</b></td><td>Close panel · level select</td></tr>
+        </table>
+        <p>Pits and spikes respawn you instantly — the only real obstacle is the <b>math gate</b> in each level. Open it, set your answer, and <b>Run it</b>: the physics does the grading. <b>First try = gold</b>, second = silver. Wrong answers cost nothing but pride.</p>
+        <button id="help-close" class="btn-go">Got it ▸</button>
+      </div>
+    </div>
+
+    <!-- touch -->
+    <div id="touch">
+      <div id="t-pad">
+        <button id="t-left">◀</button>
+        <button id="t-right">▶</button>
+      </div>
+      <div id="t-actions">
+        <button id="t-act">E</button>
+        <button id="t-jump">▲</button>
+      </div>
+    </div>
+
+    <div id="loading">Plotting the axes…</div>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
