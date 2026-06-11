@@ -27,9 +27,18 @@ export const Gates = {
       ...def,
       state: 'idle', cleared: false,
       params: { ...(def.start || {}) },
-      runs: 0, medal: null,
+      shown: { ...(def.start || {}) },   // what the WORLD renders — only updates on Run (anti-guess)
+      runs: 0, medal: null, lastLandX: null,
       anim: { podAngle: def.podAngle ?? Math.PI / 2, clock: -1, trace: [] },
     };
+  },
+
+  // params used for world rendering: live only for explicitly-'live' preview gates
+  // while their panel is open; otherwise the last RUN values. You aim with math,
+  // not with the picture.
+  viewParams(g) {
+    if (g.preview === 'live' && this.open === g) return g.params;
+    return g.shown;
   },
 
   promptFor(g) {
@@ -84,12 +93,19 @@ export const Gates = {
         <div class="gate-prompt">${rich(g.prompt)}</div>
         <div class="gate-eq" id="gate-eq">${this.equationHTML(g)}</div>
         <div class="gate-controls">${c}</div>
+        ${g.predict ? `
+        <div class="gate-predict">
+          <div class="gp-head">📐 Commit to a prediction <span>— gold requires it to be right</span></div>
+          <label class="gc-row"><span class="gc-name">${rich(g.predict.label)}</span>
+            <input type="number" step="any" value="${g.params.pred ?? ''}" data-key="pred" class="gc-num" placeholder="?">
+          </label>
+        </div>` : ''}
         ${g.note ? `<div class="gate-note">${rich(g.note)}</div>` : ''}
         <div class="gate-buttons">
           <button id="gate-run" class="btn-go">Run it ▸</button>
           <button id="gate-cancel" class="btn-quiet">Back (Esc)</button>
         </div>
-        <div class="gate-foot">Attempt ${g.runs + 1}${g.cleared ? ' · already cleared — free replay' : ' · first try = gold'}</div>
+        <div class="gate-foot">Attempt ${g.runs + 1}${g.cleared ? ' · already cleared — free replay' : ' · gold = first try + correct prediction'}</div>
       </div>`;
     this.panel.querySelectorAll('input').forEach((inp) => {
       inp.addEventListener('input', () => {
@@ -132,6 +148,17 @@ export const Gates = {
       const v = g.params[ctl.key];
       if (v == null || Number.isNaN(v)) return `Enter a value for ${ctl.label.replace(/\*/g, '')}.`;
     }
+    if (g.predict && (g.params.pred == null || Number.isNaN(g.params.pred))) {
+      return 'Commit to your prediction first — that’s where the math lives.';
+    }
+    if (g.kind === 'apex') {
+      const { xp } = g.params;
+      if (xp <= g.from + 0.2 || xp >= g.to - 0.2) return `The pad must sit on the terrain: ${g.from} < x < ${g.to}.`;
+    }
+    if (g.kind === 'field') {
+      const { C } = g.params;
+      if (C < g.cMin || C > g.cMax) return `The launch rail only reaches y(0) between ${g.cMin} and ${g.cMax}.`;
+    }
     if (g.kind === 'spinner') {
       const { px, py } = g.params;
       if (Math.abs(px * px + py * py - g.r * g.r) > g.r * 0.35) {
@@ -143,6 +170,14 @@ export const Gates = {
   },
 
   equationHTML(g) {
+    if (g.kind === 'apex') {
+      const xp = g.params.xp;
+      return rich(`${g.texF} · ${g.texDf} — pad at x = **${xp != null && !Number.isNaN(xp) ? fmtNum(xp) : '?'}**`);
+    }
+    if (g.kind === 'field') {
+      const C = g.params.C;
+      return rich(`${g.texEq} — you choose y(0) = **${C != null && !Number.isNaN(C) ? fmtNum(C) : '?'}**`);
+    }
     if (g.kind === 'parabola') {
       if (g.mode === 'apex') {
         const { h, k } = g.params;
@@ -175,7 +210,16 @@ export const Gates = {
   startRide(g) {
     const p = G.levelCtl.pl;
     g.anim.trace = [];
-    if (g.kind === 'parabola') {
+    g.shown = { ...g.params };   // the world may now reveal what you committed to
+    if (g.kind === 'apex') {
+      p.mode = 'ride'; p.rideGate = g; g.state = 'riding';
+      g.ride = { phase: 'walk', x: g.from, t: 0 };
+      Sfx.portal();
+    } else if (g.kind === 'field') {
+      p.mode = 'ride'; p.rideGate = g; g.state = 'riding';
+      g.ride = { x: 0, y: g.params.C };
+      Sfx.portal();
+    } else if (g.kind === 'parabola') {
       p.mode = 'ride'; p.rideGate = g; g.state = 'riding';
       g.ride = { t: 0 };
       // start the arc at the pad's math origin
@@ -213,8 +257,20 @@ export const Gates = {
     g.state = 'done';
     if (!g.cleared) {
       g.cleared = true;
-      g.medal = g.runs === 1 ? 'gold' : g.runs === 2 ? 'silver' : 'bronze';
-      G.hud.toast(`${g.title} cleared — ${g.medal} ✦`, g.medal === 'gold' ? 'gold' : 'info');
+      let medal = g.runs === 1 ? 'gold' : g.runs === 2 ? 'silver' : 'bronze';
+      let note = '';
+      if (g.predict) {
+        const truth = g.predict.truth(g.params, g);
+        const ok = Math.abs(g.params.pred - truth) <= g.predict.tol;
+        if (ok) {
+          note = ' · prediction ✓';
+        } else {
+          if (medal === 'gold') medal = 'silver';
+          note = ` · but you predicted ${fmtNum(g.params.pred)} and the math says **${fmtNum(truth)}** — gold wants the why`;
+        }
+      }
+      g.medal = medal;
+      G.hud.toast(`${g.title} cleared — ${medal} ✦${note}`, medal === 'gold' ? 'gold' : 'info');
     }
     p.mode = 'free'; p.rideGate = null;
     if (landX != null) { p.x = landX; p.y = landY; }
@@ -231,12 +287,66 @@ export const Gates = {
   },
 
   updateRide(g, p, dt) {
-    if (g.kind === 'parabola') {
+    if (g.kind === 'apex') {
+      const r = g.ride;
+      if (r.phase === 'walk') {
+        r.x = Math.min(r.x + 2.4 * dt, g.params.xp);
+        const ym = g.f(r.x);
+        p.x = this.mx(g, r.x) - p.w / 2;
+        p.y = this.my(g, ym) - p.h;
+        g.anim.trace.push([p.x + p.w / 2, p.y + p.h]);
+        if (r.x >= g.params.xp) {
+          r.phase = 'jump';
+          r.t = 0;
+          r.fromX = g.params.xp;
+          r.fromY = g.f(g.params.xp);
+          r.ok = Math.abs(g.params.xp - g.crit) <= g.tolX;
+          Sfx.blip();
+        }
+      } else {
+        r.t += dt;
+        const T = 0.6, u = Math.min(1, r.t / T);
+        let xm, ym;
+        if (r.ok) {
+          xm = r.fromX + (g.exit[0] - r.fromX) * u;
+          ym = r.fromY + (g.exit[1] - r.fromY) * u + 2.4 * 4 * u * (1 - u);
+        } else {
+          xm = r.fromX + 1.7 * u;
+          ym = r.fromY + 1.3 * 4 * u * (1 - u) - 3.2 * u * u;
+        }
+        p.x = this.mx(g, xm) - p.w / 2;
+        p.y = this.my(g, ym) - p.h;
+        g.anim.trace.push([p.x + p.w / 2, p.y + p.h]);
+        if (u >= 1) {
+          if (r.ok) return this.succeed(g, this.mx(g, g.exit[0]) - p.w / 2, this.my(g, g.exit[1]) - p.h);
+          return this.fail(g, `Weak launch — the pad at x = ${fmtNum(g.params.xp)} isn’t the summit. Solve f′(x) = 0, and make sure it’s a MAX.`);
+        }
+      }
+    }
+
+    else if (g.kind === 'field') {
+      const r = g.ride;
+      const step = g.flySpeed * dt;
+      r.x += step;
+      r.y += g.fxy(r.x, r.y) * step;
+      p.x = this.mx(g, r.x) - p.w / 2;
+      p.y = this.my(g, r.y) - p.h / 2;
+      g.anim.trace.push([p.x + p.w / 2, p.y + p.h / 2]);
+      if (Math.hypot(r.x - g.ring[0], r.y - g.ring[1]) <= g.ringR) {
+        return this.succeed(g, this.mx(g, g.exit[0]) - p.w / 2, this.my(g, g.exit[1]) - p.h);
+      }
+      if (r.x > g.xEnd || r.y > g.yMax + 1 || r.y < g.yMin - 1) {
+        return this.fail(g, 'The field carried you past the ring — the initial condition y(0) = C picks which solution curve you ride.');
+      }
+    }
+
+    else if (g.kind === 'parabola') {
       const r = g.ride;
       r.t += dt;
       const xm = g.vx * r.t;                       // math-units x along the arc
       const f = this.parabolaF(g);
       const ym = f(xm);
+      g.lastLandX = xm;
       p.x = this.mx(g, xm) - p.w / 2;
       p.y = this.my(g, ym) - p.h;
       g.anim.trace.push([p.x + p.w / 2, p.y + p.h]);
@@ -339,13 +449,13 @@ export const Gates = {
     }
   },
 
-  parabolaF(g) {
+  parabolaF(g, P = g.params) {
     if (g.mode === 'apex') {
-      const { h, k } = g.params;
+      const { h, k } = P;
       const a = -k / (h * h);
       return (x) => a * (x - h) ** 2 + k;
     }
-    const { a, b } = g.params;
+    const { a, b } = P;
     return (x) => a * x * x + b * x;
   },
 
@@ -373,16 +483,74 @@ export const Gates = {
       ctx.beginPath(); ctx.roundRect(z.x, z.y + z.h - 12, z.w, 12, 4); ctx.fill();
       ctx.fillStyle = pal.accent;
       ctx.beginPath(); ctx.roundRect(z.x + 4, z.y + z.h - 16, z.w - 8, 6, 3); ctx.fill();
-      // arc preview (armed or being tuned)
-      if (g.state !== 'idle' || G.mode === 'gate') {
-        const f = this.parabolaF(g);
-        if (g.params.h > 0 || g.mode === 'coeffs') this.plotCurve(g, ctx, f, 0, g.rangeMax, pal.preview, true);
+      // arc preview: live-preview gates show it while tuning (tutorial);
+      // everything else only ever shows the values you last RAN.
+      const P = this.viewParams(g);
+      const show = g.preview === 'live' ? (this.open === g || g.state !== 'idle') : g.state !== 'idle';
+      if (show && P && (g.mode === 'coeffs' ? P.a != null && !Number.isNaN(P.a) && P.b != null && !Number.isNaN(P.b) : P.h > 0 && P.k != null)) {
+        this.plotCurve(g, ctx, this.parabolaF(g, P), 0, g.rangeMax, pal.preview, true);
       }
     }
 
+    else if (g.kind === 'apex') {
+      this.plotCurve(g, ctx, g.f, g.from, g.to, pal.track, false, 5);
+      const P = this.viewParams(g);
+      if (g.state !== 'idle' && P.xp != null && !Number.isNaN(P.xp)) {
+        const px = this.mx(g, P.xp), py = this.my(g, g.f(P.xp));
+        ctx.fillStyle = pal.accent;
+        ctx.beginPath(); ctx.roundRect(px - 14, py - 8, 28, 7, 3); ctx.fill();
+        ctx.strokeStyle = pal.accent; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(px - 9, py - 8); ctx.lineTo(px - 9, py - 15); ctx.moveTo(px + 9, py - 8); ctx.lineTo(px + 9, py - 15); ctx.stroke();
+      }
+      // station
+      const z = g.zone;
+      ctx.fillStyle = pal.device;
+      ctx.beginPath(); ctx.roundRect(z.x, z.y + z.h - 14, z.w, 14, 4); ctx.fill();
+    }
+
+    else if (g.kind === 'field') {
+      // the slope field itself: a dash at every lattice point
+      ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+      ctx.lineWidth = 1.6;
+      for (let gx = g.fieldBox[0]; gx <= g.fieldBox[1]; gx++) {
+        for (let gy = g.fieldBox[2]; gy <= g.fieldBox[3]; gy++) {
+          const s = g.fxy(gx, gy);
+          const ang = Math.atan2(-s, 1);   // screen y flips math slope
+          const cx = this.mx(g, gx), cy = this.my(g, gy);
+          ctx.beginPath();
+          ctx.moveTo(cx - Math.cos(ang) * 8, cy - Math.sin(ang) * 8);
+          ctx.lineTo(cx + Math.cos(ang) * 8, cy + Math.sin(ang) * 8);
+          ctx.stroke();
+        }
+      }
+      // launch rail at x = 0
+      const railTop = this.my(g, g.cMax), railBot = this.my(g, g.cMin);
+      ctx.strokeStyle = pal.accent; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(g.org[0], railTop - 8); ctx.lineTo(g.org[0], railBot + 8); ctx.stroke();
+      const P = this.viewParams(g);
+      if (g.state !== 'idle' && P.C != null && !Number.isNaN(P.C)) {
+        ctx.fillStyle = pal.accent;
+        ctx.beginPath(); ctx.arc(g.org[0], this.my(g, P.C), 6.5, 0, Math.PI * 2); ctx.fill();
+      }
+      // target ring
+      const tx = this.mx(g, g.ring[0]), ty = this.my(g, g.ring[1]);
+      const pulse = 1 + Math.sin(t * 4) * 0.12;
+      ctx.strokeStyle = '#7dffb0'; ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.arc(tx, ty, g.ringR * g.S * pulse, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(125,255,176,0.85)';
+      ctx.font = '12px Outfit, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`(${g.ring[0]}, ${g.ring[1]})`, tx, ty - g.ringR * g.S - 8);
+      // station
+      const z = g.zone;
+      ctx.fillStyle = pal.device;
+      ctx.beginPath(); ctx.roundRect(z.x, z.y + z.h - 12, z.w, 12, 4); ctx.fill();
+    }
+
     else if (g.kind === 'track') {
+      const TP = this.viewParams(g);
       for (const piece of g.pieces) {
-        this.plotCurve(g, ctx, (x) => piece.f(x, g.params), piece.from, piece.to, pal.track, false, 5);
+        this.plotCurve(g, ctx, (x) => piece.f(x, TP), piece.from, piece.to, pal.track, false, 5);
       }
       for (const s of g.seams) {
         const sx = this.mx(g, s);
@@ -422,9 +590,10 @@ export const Gates = {
         ctx.lineTo(ax + dx * 8 - (dx * 5 + dy * 4), ay + dy * 8 - (dy * 5 - dx * 4));
         ctx.stroke();
       }
-      // chosen release point
-      if (g.state !== 'idle' && g.params.px != null && !Number.isNaN(g.params.px)) {
-        const pxp = this.mx(g, g.params.px), pyp = this.my(g, g.params.py);
+      // chosen release point (only what you last RAN — no live aiming)
+      const SP = this.viewParams(g);
+      if (g.state !== 'idle' && SP.px != null && !Number.isNaN(SP.px)) {
+        const pxp = this.mx(g, SP.px), pyp = this.my(g, SP.py);
         ctx.fillStyle = '#ffd76e';
         ctx.beginPath(); ctx.arc(pxp, pyp, 6, 0, Math.PI * 2); ctx.fill();
         // tangent + radius shown once flying/cleared (the payoff diagram)
@@ -432,7 +601,7 @@ export const Gates = {
           ctx.strokeStyle = 'rgba(255,215,110,0.5)';
           ctx.lineWidth = 2;
           ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(pxp, pyp); ctx.stroke();
-          const m = g.params.py === 0 ? null : -g.params.px / g.params.py;
+          const m = SP.py === 0 ? null : -SP.px / SP.py;
           if (m != null) {
             // math slope m renders as −m on screen (y axis flips)
             ctx.setLineDash([4, 5]);

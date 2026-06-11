@@ -45,6 +45,8 @@ for (const w of WORLDS) {
       const my = (y) => g.org[1] - g.S * y;
       const d = (f, x) => (f(x + 1e-4) - f(x - 1e-4)) / 2e-4;
 
+      let simLandX = null;   // captured for prediction verification
+
       if (g.kind === 'parabola') {
         const P = g.answerKey;
         const f = g.mode === 'apex'
@@ -57,7 +59,7 @@ for (const w of WORLDS) {
           let crashed = false;
           for (const p of l.platforms) {
             if (!overlap(box, p)) continue;
-            if (slope < 0 && box.y + PH - p.y < 26) { landed = true; } else { crashed = true; }
+            if (slope < 0 && box.y + PH - p.y < 26) { landed = true; simLandX = x; } else { crashed = true; }
             break;
           }
           for (const s of l.spikes || []) if (overlap(box, s)) crashed = true;
@@ -119,7 +121,54 @@ for (const w of WORLDS) {
         else if (Math.abs(lock.x - (g.zone.x + g.zone.w / 2 + g.d)) > 2) warn(`${gtag} gateLock platform not at door position`);
       }
 
+      else if (g.kind === 'apex') {
+        const { xp } = g.answerKey;
+        if (Math.abs(xp - g.crit) > g.tolX) warn(`${gtag} answerKey xp=${xp} outside tolX of crit=${g.crit}`);
+        // crit must actually be a local max: f' flips + to −
+        const dl = d(g.f, g.crit - 0.2), dr = d(g.f, g.crit + 0.2);
+        if (!(dl > 0 && dr < 0)) warn(`${gtag} crit=${g.crit} is not a local max (f' ${dl.toFixed(2)} → ${dr.toFixed(2)})`);
+        const ex = mx(g.exit[0]), ey = my(g.exit[1]);
+        if (!l.platforms.some((p) => ex >= p.x && ex <= p.x + p.w && Math.abs(ey - p.y) < 6)) {
+          warn(`${gtag} exit (${ex.toFixed(0)}, ${ey.toFixed(0)}) not on a platform top`);
+        }
+        // terrain start should meet a platform top (the station ledge)
+        const sy = my(g.f(g.from));
+        if (!l.platforms.some((p) => Math.abs(sy - p.y) < 8)) warn(`${gtag} terrain start not at a platform top`);
+      }
+
+      else if (g.kind === 'field') {
+        const { C } = g.answerKey;
+        if (C < g.cMin || C > g.cMax) warn(`${gtag} answerKey C outside rail [${g.cMin}, ${g.cMax}]`);
+        // Euler-integrate exactly like the ride does (coarser step, same scheme)
+        let x = 0, y = C, hit = false;
+        while (x <= g.xEnd) {
+          const step = 0.02;
+          x += step; y += g.fxy(x, y) * step;
+          if (Math.hypot(x - g.ring[0], y - g.ring[1]) <= g.ringR) { hit = true; break; }
+          if (y > g.yMax + 1 || y < g.yMin - 1) break;
+        }
+        if (!hit) warn(`${gtag} answerKey C=${C} never threads the ring`);
+        const ex = mx(g.exit[0]), ey = my(g.exit[1]);
+        if (!l.platforms.some((p) => ex >= p.x && ex <= p.x + p.w && Math.abs(ey - p.y) < 6)) {
+          warn(`${gtag} exit (${ex.toFixed(0)}, ${ey.toFixed(0)}) not on a platform top`);
+        }
+      }
+
       else warn(`${gtag} unknown kind '${g.kind}'`);
+
+      // ---- prediction verification: the authored pred must match the math ----
+      if (!g.predict) warn(`${gtag} missing predict config (gold needs a prediction)`);
+      else {
+        if (g.answerKey.pred == null) warn(`${gtag} answerKey missing pred`);
+        else {
+          const mock = { ...g, lastLandX: simLandX };
+          const truth = g.predict.truth(g.answerKey, mock);
+          if (truth == null || Number.isNaN(truth)) warn(`${gtag} predict.truth() returned ${truth}`);
+          else if (Math.abs(g.answerKey.pred - truth) > g.predict.tol) {
+            warn(`${gtag} answerKey.pred=${g.answerKey.pred} but truth=${truth.toFixed(3)} (tol ${g.predict.tol})`);
+          }
+        }
+      }
     }
     if (!(l.gates || []).length) warn(`${tag} has no gates — that's just a platformer`);
   }
