@@ -32,16 +32,30 @@ export function hash2(x, y) {
   return ((h ^ (h >> 16)) >>> 0) / 4294967295;
 }
 
-// Rich text with math helpers: **bold**, *italic*, ^{sup}, _{sub}, and
-// lim_{x→a} typeset AP-style with the approach stacked beneath. HTML-escaped first.
+// Render a TeX string with KaTeX (vendored). Falls back to the raw string if
+// KaTeX hasn't loaded (or under Node, where the validator imports this module).
+export function tex(s, display = false) {
+  if (typeof window !== 'undefined' && window.katex) {
+    return window.katex.renderToString(s, { throwOnError: false, displayMode: display });
+  }
+  return s;
+}
+
+// Rich text: **bold**, *italic*, plus $...$ segments typeset by KaTeX
+// (fractions stacked, primes and minus signs done properly). Plain-text parts
+// are HTML-escaped; math parts go straight to KaTeX.
 export function rich(text) {
-  return String(text)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-    .replace(/\*(.+?)\*/g, '<i>$1</i>')
-    .replace(/lim_\{(.+?)\}/g, '<span class="lim">lim<span class="lim-under">$1</span></span>')
-    .replace(/\^\{(.+?)\}/g, '<sup>$1</sup>')
-    .replace(/_\{(.+?)\}/g, '<sub>$1</sub>');
+  const parts = String(text).split(/\$(.+?)\$/g);   // odd indices are TeX
+  return parts.map((part, i) => {
+    if (i % 2 === 1) return tex(part);
+    return part
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/\*(.+?)\*/g, '<i>$1</i>')
+      .replace(/lim_\{(.+?)\}/g, '<span class="lim">lim<span class="lim-under">$1</span></span>')
+      .replace(/\^\{(.+?)\}/g, '<sup>$1</sup>')
+      .replace(/_\{(.+?)\}/g, '<sub>$1</sub>');
+  }).join('');
 }
 
 export function fmtNum(n, dp = 2) {

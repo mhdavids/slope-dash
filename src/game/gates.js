@@ -11,7 +11,7 @@
 // Shared shape: def { kind, zone:{x,y,w,h}, org:[ox,oy], S, ...cfg, answerKey }
 // Runtime adds: state idle|armed, params, runs, medal, cleared.
 
-import { G, qs, el, rich, fmtNum, clamp } from '../engine/g.js';
+import { G, qs, el, rich, tex, fmtNum, clamp } from '../engine/g.js';
 import { Sfx } from '../engine/audio.js';
 
 const NUM = (v) => (typeof v === 'string' ? parseFloat(v) : v);
@@ -170,38 +170,53 @@ export const Gates = {
   },
 
   equationHTML(g) {
+    // ?-placeholder for not-yet-entered values, TeX-safe
+    const Q = (v, dp = 2) => (v == null || Number.isNaN(v) ? '\\,?\\,' : fmtNum(v, dp));
+
     if (g.kind === 'apex') {
       const xp = g.params.xp;
-      return rich(`${g.texF} · ${g.texDf} — pad at x = **${xp != null && !Number.isNaN(xp) ? fmtNum(xp) : '?'}**`);
+      return tex(g.texF, true) + tex(g.texDf, true)
+        + rich(`pad at $x_p = ${Q(xp, 1)}$`);
     }
+
     if (g.kind === 'field') {
       const C = g.params.C;
-      return rich(`${g.texEq} — you choose y(0) = **${C != null && !Number.isNaN(C) ? fmtNum(C) : '?'}**`);
+      return tex(`${g.texEq}`, true) + rich(`launch height: $y(0) = C = ${Q(C, 1)}$`);
     }
+
     if (g.kind === 'parabola') {
       if (g.mode === 'apex') {
         const { h, k } = g.params;
         const a = -k / (h * h);
-        return rich(`y = a(x − **${fmtNum(h)}**)^{2} + **${fmtNum(k)}**, through (0, 0) ⇒ a = −k/h² = **${fmtNum(a, 3)}**`);
+        return tex(`y = a\\,(x - ${Q(h, 1)})^{2} + ${Q(k, 1)} \\quad\\text{with}\\quad a = -\\frac{k}{h^{2}} = ${Q(a, 3)}`, true)
+          + rich('(the arc passes through your feet at $(0, 0)$)');
       }
       const { a, b } = g.params;
-      return rich(`y = **${fmtNum(a)}**x^{2} + **${fmtNum(b)}**x`);
+      const bTex = b == null || Number.isNaN(b) ? '+ \\,?\\,' : b < 0 ? `- ${fmtNum(Math.abs(b))}` : `+ ${fmtNum(b)}`;
+      return tex(`y = ${Q(a, 3)}\\,x^{2} ${bTex}\\,x`, true)
+        + rich(`roots at $x = 0$ and $x = -\\frac{b}{a}$`);
     }
+
     if (g.kind === 'track') return g.tex(g.params);
+
     if (g.kind === 'spinner') {
       const { px, py } = g.params;
-      const slope = py === 0 ? '∞ (vertical)' : fmtNum(-px / py, 2);
-      return rich(`x^{2} + y^{2} = ${g.r * g.r} ⇒ dy/dx = −x/y${px != null && py != null && !Number.isNaN(px) ? ` = **${slope}** at (${fmtNum(px)}, ${fmtNum(py)})` : ''}`);
+      const have = px != null && py != null && !Number.isNaN(px) && !Number.isNaN(py);
+      const slopeTex = have ? (py === 0 ? '\\text{vertical}' : fmtNum(-px / py, 2)) : null;
+      return tex(`x^{2} + y^{2} = ${g.r * g.r} \\;\\Rightarrow\\; \\frac{dy}{dx} = -\\frac{x}{y}${have ? ` = ${slopeTex} \\;\\text{ at } (${fmtNum(px)}, ${fmtNum(py)})` : ''}`, true);
     }
+
     if (g.kind === 'chrono') {
       if (g.solveFor === 'v') {
         const v = g.params.v;
         const arr = v > 0 ? g.d / v : null;
-        return rich(`you leave at t = 0 ⇒ arrival = d/v = ${g.d}/v${arr != null && !Number.isNaN(arr) ? ` = **${fmtNum(arr, 2)}s**` : ''} — door open on [${g.open0}, ${g.open1}]`);
+        return tex(`\\text{arrival} = \\frac{d}{v} = \\frac{${g.d}}{${Q(v, 0)}}${arr != null && !Number.isNaN(arr) ? ` = ${fmtNum(arr, 2)}\\,\\text{s}` : ''}`, true)
+          + rich(`door open on $${g.open0} \\le t \\le ${g.open1}$`);
       }
       const t0 = g.params.t0;
       const arr = t0 != null && !Number.isNaN(t0) ? t0 + g.d / g.v : null;
-      return rich(`arrival = t_{0} + d/v = t_{0} + ${fmtNum(g.d / g.v)}${arr != null ? ` = **${fmtNum(arr)}s**` : ''} — door open on [${g.open0}, ${g.open1}]`);
+      return tex(`\\text{arrival} = t_0 + \\frac{d}{v} = ${Q(t0, 1)} + ${fmtNum(g.d / g.v, 1)}${arr != null ? ` = ${fmtNum(arr, 2)}\\,\\text{s}` : ''}`, true)
+        + rich(`door open on $${g.open0} \\le t \\le ${g.open1}$`);
     }
     return '';
   },
@@ -319,7 +334,7 @@ export const Gates = {
         g.anim.trace.push([p.x + p.w / 2, p.y + p.h]);
         if (u >= 1) {
           if (r.ok) return this.succeed(g, this.mx(g, g.exit[0]) - p.w / 2, this.my(g, g.exit[1]) - p.h);
-          return this.fail(g, `Weak launch — the pad at x = ${fmtNum(g.params.xp)} isn’t the summit. Solve f′(x) = 0, and make sure it’s a MAX.`);
+          return this.fail(g, `Weak launch — the pad at x = ${fmtNum(g.params.xp)} isn’t the summit. Solve $f'(x) = 0$, and make sure it’s a MAX.`);
         }
       }
     }
