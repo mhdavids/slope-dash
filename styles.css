@@ -134,8 +134,12 @@ sup, sub { font-size: 0.72em; line-height: 0; }
 .gate-foot { margin-top: 12px; font-size: 12.5px; color: var(--ink-dim); }
 
 /* ---------- title ---------- */
-.screen { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; }
-.title-inner { text-align: center; max-width: 720px; padding: 20px; }
+/* scroll-safe centering: a centered flex child taller than the screen clips its
+   TOP into an unscrollable zone (the 'can't see above Spin Station' bug).
+   Top-align + overflow on the container, margin:auto on the child — it centers
+   when it fits and scrolls from the very top when it doesn't. */
+.screen { position: absolute; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; }
+.title-inner { text-align: center; max-width: 720px; padding: 20px; margin: auto; }
 .title-kicker { font-size: 12px; letter-spacing: 0.26em; color: var(--ink-dim); font-weight: 600; }
 .title-logo {
   font-size: 92px; font-weight: 800; line-height: 0.95; margin: 18px 0 10px;
@@ -150,7 +154,7 @@ sup, sub { font-size: 0.72em; line-height: 0; }
 
 /* ---------- level select ---------- */
 #select { overflow-y: auto; }
-.select-inner { width: min(860px, 94vw); padding: 36px 16px; }
+.select-inner { width: min(860px, 94vw); padding: 36px 16px; margin: auto; }
 .select-logo { font-size: 40px; font-weight: 800; }
 .select-sub { color: var(--ink-dim); margin: 2px 0 22px; }
 .sel-world {
@@ -181,6 +185,7 @@ sup, sub { font-size: 0.72em; line-height: 0; }
 }
 .done-card {
   width: min(560px, 94vw); text-align: center;
+  max-height: 92vh; overflow-y: auto;
   background: var(--panel);
   border: 2px solid var(--w, var(--gold));
   border-radius: 16px; padding: 28px 30px;
@@ -233,6 +238,7 @@ sup, sub { font-size: 0.72em; line-height: 0; }
 }
 .help-card {
   width: min(540px, 94vw);
+  max-height: 92vh; overflow-y: auto;
   background: var(--panel); border: 1px solid rgba(255,255,255,0.2);
   border-radius: 16px; padding: 24px 28px;
 }
