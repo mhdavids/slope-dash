@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Slope Dash — a calculus platformer</title>
   <meta name="description" content="A 2D platformer where the obstacles are calculus: tune jump parabolas, weld piecewise tracks continuous, compute tangent release points, and time your runs." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
@@ -81,6 +81,15 @@
     </div>
 
     <div id="loading">Plotting the axes…</div>
+
+    <!-- portrait phones: the game plays sideways -->
+    <div id="rotate">
+      <div class="rotate-card">
+        <div class="rotate-icon">📱⟳</div>
+        <b>Rotate your phone</b>
+        <p>Slope Dash plays sideways — landscape gives the parabolas room to fly.</p>
+      </div>
+    </div>
   </div>
   <script type="module" src="src/main.js"></script>
 </body>

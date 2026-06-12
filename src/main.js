@@ -17,11 +17,16 @@ function setupCanvas() {
   G.canvas = canvas;
   G.ctx = canvas.getContext('2d');
   const fit = () => {
-    const scale = Math.min(window.innerWidth / VIEW_W, window.innerHeight / VIEW_H);
+    // visualViewport tracks iOS Safari's real visible area (URL bar grows/shrinks it)
+    const vw = window.visualViewport?.width ?? window.innerWidth;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const scale = Math.min(vw / VIEW_W, vh / VIEW_H);
     canvas.style.width = `${VIEW_W * scale}px`;
     canvas.style.height = `${VIEW_H * scale}px`;
   };
   window.addEventListener('resize', fit);
+  window.visualViewport?.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', () => setTimeout(fit, 250));
   fit();
 }
 

@@ -66,6 +66,7 @@ export const Input = {
     if (!pad) return;
     if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;
     pad.classList.add('touch-on');
+    document.body.classList.add('touch');   // drives the portrait rotate overlay
     const bind = (id, key) => {
       const b = qs(id);
       if (!b) return;

@@ -293,3 +293,40 @@ sup, sub { font-size: 0.72em; line-height: 0; }
   display: inline-block; background: rgba(255,255,255,0.12);
   border-radius: 5px; padding: 0 7px; margin-right: 8px; font-weight: 600;
 }
+
+/* ---------- mobile / iPhone ---------- */
+html { -webkit-tap-highlight-color: transparent; }
+button, input { touch-action: manipulation; }
+
+#rotate {
+  display: none; position: absolute; inset: 0; z-index: 200;
+  background: var(--bg);
+  align-items: center; justify-content: center; text-align: center;
+}
+.rotate-card { max-width: 300px; padding: 24px; color: var(--ink); }
+.rotate-icon { font-size: 54px; margin-bottom: 12px; }
+.rotate-card b { font-size: 20px; }
+.rotate-card p { color: var(--ink-dim); font-size: 14.5px; margin-top: 8px; line-height: 1.5; }
+
+/* portrait *phones* only (iPads can play portrait fine) — body.touch is set by
+   input.js using the same detection that enables the on-screen buttons */
+@media (orientation: portrait) and (max-width: 760px) {
+  body.touch #rotate { display: flex; }
+}
+
+/* keep touch buttons clear of the iOS home indicator + rounded corners */
+#touch button { bottom: calc(14px + env(safe-area-inset-bottom)); }
+#t-left { left: calc(14px + env(safe-area-inset-left)); }
+#t-right { left: calc(84px + env(safe-area-inset-left)); }
+#t-jump { right: calc(14px + env(safe-area-inset-right)); }
+#t-act { right: calc(84px + env(safe-area-inset-right)); }
+
+/* tighter panels on short landscape-phone screens */
+@media (max-height: 480px) {
+  .gate-card, .done-card { padding: 14px 16px; max-height: 96vh; }
+  .gate-eq { font-size: 15px; margin: 8px 0; }
+  .gate-prompt, .troll-riddle { font-size: 14px; }
+  .gate-card h2 { font-size: 18px; margin-bottom: 6px; }
+  .mg-q { font-size: 16px; }
+  .title-logo { font-size: 56px; }
+}
